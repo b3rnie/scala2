@@ -68,11 +68,11 @@ object Bencode{
         val len = b.size.toString.getBytes :+ ':'.toByte
         (len ++ b).toList
       case BencodeDict(m) =>
-        var res = m.toArray.map(
-                    e =>
-                      (e._1.length.toString.getBytes :+ ':'.toByte) ++
-                      e._1.getBytes ++
-                      encode(e._2)).flatten
+        var res = m.toArray.sortWith((a, b) => a._1 < b._1).map(
+          e =>
+            (e._1.length.toString.getBytes :+ ':'.toByte) ++
+            e._1.getBytes ++
+            encode(e._2)).flatten
         ('d'.toByte +: res :+ 'e'.toByte).toList
     }
   }
