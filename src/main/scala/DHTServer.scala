@@ -4,7 +4,10 @@ import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.io._
 
+import akka.util.ByteString
+
 import java.net._
+import pimpme._
 
 class DHTServer extends Actor {
   import context.system
@@ -22,14 +25,22 @@ class DHTServer extends Actor {
     case Udp.Received(data, sender) =>
       try {
         var dec = Bencoding.decode(data.toList)
-        DHTMessage.parse(dec)
+        DHTMessage.parse(dec) match {
+          case Some(resp) =>
+            println(resp.size)
+            println(ByteString("123"))
+            val resp2 = ByteString(new String(resp.toArray))
+            ref ! Udp.Send(resp2, sender)
+          case None =>
+            ???
+        }
       } catch {
-        case e : Bencoding.Bexception => { }
+        case e : Bencoding.DecodeException => { }
         case e : Exception => {
           println("exception!")
         }
         case e : Error => {
-          println("error")
+          println("error" + e)
         }
       }
     //val processed = ???
@@ -55,20 +66,73 @@ object DHTMessage {
    *   e - list (error code (int), error msg (string))
    */
 
-  def parse(e : Bencoding.Bentry) {
-    e match {
-      case Bencoding.Bdict(dict) =>
+  def parse(e : Bencoding.Entry) : Option[List[Byte]] = {
+     e match {
+      case Bencoding.Dict(dict) =>
         dict.get("y") match {
-          case Some(Bencoding.Bbytes(Array('q'))) =>
-            var Bencoding.Bbytes(method) = dict.get("q").get
-            var Bencoding.Bdict(args)   = dict.get("a").get
-            println(new String(method))
-            println(args)
-          case Some(Bencoding.Bbytes(Array('r'))) => ???
-          case Some(Bencoding.Bbytes(Array('e'))) => ???
-          case None                               => ???
+          case Some(Bencoding.Bytes(Array('q'))) =>
+            (dict.get("q"), dict.get("a")) match {
+              case (Some(Bencoding.Bytes(method)),
+                    Some(Bencoding.Dict(args))) =>
+                parse_query(method, args)
+              case _ =>
+                None
+            }
+          case Some(Bencoding.Bytes(Array('r'))) =>
+            dict.get("r") match {
+              case Some(Bencoding.Dict(vals)) =>
+                parse_response(vals)
+              case _ =>
+                None
+            }
+          case Some(Bencoding.Bytes(Array('e'))) =>
+            dict.get("e") match {
+              case Some(Bencoding.List(error)) =>
+                parse_error(error)
+              case _ =>
+                None
+            }
+          case _ => None
         }
-      case _ => ???
+      case _ => None
     }
+  }
+
+  def parse_query(method : Array[Byte], args : Map[String,Bencoding.Entry]) : Option[List[Byte]] = {
+    var s = new String(method)
+    s match {
+      case "ping" =>
+        var resp = Bencoding.encode(Bencoding.Dict(Map("id" -> Bencoding.Bytes("foobar".getBytes()))))
+        println(resp)
+        Option(resp)
+      case "find_node" =>
+        println("find node")
+        ???
+      case "get_peers" =>
+        println("get_peers")
+        ???
+      case "announce_peer" =>
+        println("announce_peer")
+        ???
+      case _ =>
+        println(s.pimped)
+        ???
+    }
+ }
+
+  def parse_response(vals : Map[String,Bencoding.Entry]) = {
+    println("parse_respone")
+    ???
+  }
+
+  def parse_error(list : List[Any]) = {
+    println("error: " + list)
+    ???
+  }
+}
+
+object pimpme {
+  implicit class pimped(val s : String) extends AnyVal {
+    def pimped = "*" + s + "*"
   }
 }
