@@ -10,7 +10,7 @@ object Main {
   def main(args: Array[String]) {
     val bytes = FileUtils.readFile("/home/bernie/testtorrent.torrent")
     var res = Bencoding.decode(bytes)
-    println(res)
+    // println(res)
     var res2 = Bencoding.encode(res)
     println(res2.size)
     var s = new String(res2.toArray, "ISO-8859-1")
@@ -18,11 +18,12 @@ object Main {
       p.write(s)
     })
 
+    val id = "my id"
     val system = ActorSystem("ServerSystem")
-    val dhtServerActor = system.actorOf(Props[new DHTServer(id)], name = "dhtserver")
-    //println("sleeping..")
-    Thread.sleep(10000L)
-    //println("sleep done..")
+    val dhtServerActor = system.actorOf(Props(new DHTServer(id)), name = "dhtserver")
+    println("sleeping..")
+    Thread.sleep(5000L)
+    println("sleep done..")
     dhtServerActor ! Udp.Unbind
   }
 }
