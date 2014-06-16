@@ -17,8 +17,9 @@ object Main {
     FileUtils.writeFile("/home/bernie/testtorrent")(p => {
       p.write(s)
     })
+
     val system = ActorSystem("ServerSystem")
-    val dhtServerActor = system.actorOf(Props[DHTServer], name = "dhtserver")
+    val dhtServerActor = system.actorOf(Props[new DHTServer(id)], name = "dhtserver")
     //println("sleeping..")
     Thread.sleep(10000L)
     //println("sleep done..")
@@ -26,3 +27,12 @@ object Main {
   }
 }
 
+object Id {
+  //val md = java.security.MessageDigest.getInstance("SHA-1")
+  val bytes = new Array[Byte](20)
+  scala.util.Random.nextBytes(bytes)
+
+  def distance(a : Int, b : Int) : Int = {
+    a ^ b
+  }
+}
