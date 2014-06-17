@@ -27,15 +27,16 @@ class DHTServer(id : String) extends Actor {
         var dec = Bencoding.decode(data.toList)
         DHTMessage.message(dec).foreach( resp => {
           val resp2 = ByteString(new String(Bencoding.encode(resp).toArray))
-          //ref ! Udp.Send(resp2, sender)
+          ref ! Udp.Send(resp2, sender)
         })
       } catch {
         case e : Bencoding.DecodeException => { }
         case e : Exception => {
-          println("exception!")
+          println(new String(data.toArray))
+          println("error" + e.getStackTrace)
         }
         case e : Error => {
-          println("error" + e)
+          
         }
       }
     //val processed = ???
@@ -64,19 +65,22 @@ object DHTMessage {
   def message(e : Bencoding.Entry) : Option[Bencoding.Dict] = {
      e match {
       case Bencoding.Dict(dict) =>
-        dict.get("y") match {
-          case Some(Bencoding.Bytes("q")) =>
+         (dict.get("y"), dict.get("t")) match {
+          case (Some(Bencoding.Bytes("q")),
+                Some(Bencoding.Bytes(tid))) =>
             (dict.get("q"), dict.get("a")) match {
               case (Some(Bencoding.Bytes(method)),
-                    Some(Bencoding.Dict(args))) => query(method, args)
+                    Some(Bencoding.Dict(args))) => query(tid, method, args)
               case _                            => None
             }
-          case Some(Bencoding.Bytes("r")) =>
+          case (Some(Bencoding.Bytes("r")),
+                Some(Bencoding.Bytes(tid))) =>
             dict.get("r") match {
               case Some(Bencoding.Dict(vals)) => response(vals)
               case _                          => None
             }
-          case Some(Bencoding.Bytes("e")) =>
+          case (Some(Bencoding.Bytes("e")),
+                Some(Bencoding.Bytes(tid))) =>
             dict.get("e") match {
               case Some(Bencoding.List(msg)) => error(msg)
               case _                           => None
@@ -87,54 +91,62 @@ object DHTMessage {
     }
   }
 
-  def query(method : String, args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+  def query(tid : String, method : String, args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
     method match {
-      case "ping"          => query_ping(args)
-      case "find_node"     => query_find_node(args)
-      case "get_peers"     => query_get_peers(args)
+      case "ping"          => query_ping(tid, args)
+      case "find_node"     => query_find_node(tid, args)
+      case "get_peers"     => query_get_peers(tid, args)
       case "announce_peer" => query_announce_peer(args)
       case _               => println(method.pimped)
                               None
     }
   }
 
-  def query_ping(args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+  def query_ping(tid : String, args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+    println("ping")
     args.get("id") match {
       case Some(Bencoding.Bytes(id)) =>
-        println("ping")
-        Option(Bencoding.Dict(
-          Map("id" -> Bencoding.Bytes("myid"))))
+        //java.net.URLEncoder.encode(id, "ISO-8859-1") + ")")
+        Option(Bencoding.Dict(Map("y" -> Bencoding.Bytes("r"),
+                                  "t" -> Bencoding.Bytes(tid),
+                                  "r" -> Bencoding.Dict(
+          Map("id" -> Bencoding.Bytes(new String(DHT.my_id)))))))
       case _ => None
     }
   }
 
-  def query_find_node(args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+  def query_find_node(tid : String, args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+    println("find_node")
     (args.get("id"), args.get("target")) match {
       case (Some(Bencoding.Bytes(id)),
             Some(Bencoding.Bytes(target))) =>
-        println("find_node")
-        Option(Bencoding.Dict(
-          Map("id" -> Bencoding.Bytes("myid"),
-              "nodes" -> Bencoding.Bytes("blah"))))
+        Option(Bencoding.Dict(Map("y" -> Bencoding.Bytes("r"),
+                                  "t" -> Bencoding.Bytes(tid),
+                                  "r" -> Bencoding.Dict(
+          Map("id"    -> Bencoding.Bytes(new String(DHT.my_id)),
+              "nodes" -> Bencoding.Bytes(""))))))
       case _ => ???
     }
   }
 
-  def query_get_peers(args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+  def query_get_peers(tid : String, args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+    println("get_peers")
     (args.get("id"), args.get("info_hash")) match {
       case (Some(Bencoding.Bytes(id)),
             Some(Bencoding.Bytes(info_hash))) =>
-        println("get_peers")
-        Option(Bencoding.Dict(
-          Map("id" -> Bencoding.Bytes("myid"),
-              "token" -> Bencoding.Bytes("wtf"),
-              "values" -> Bencoding.Bytes("values"), //values OR nodes
-              "nodes" -> Bencoding.Bytes("nodes"))))
+        Option(Bencoding.Dict(Map("y" -> Bencoding.Bytes("r"),
+                                  "t" -> Bencoding.Bytes(tid),
+                                  "r" -> Bencoding.Dict(
+          Map("id"     -> Bencoding.Bytes(new String(DHT.my_id)),
+              "token"  -> Bencoding.Bytes("wtf"),
+              //"values" -> Bencoding.Bytes("values"), //values OR nodes
+              "nodes" -> Bencoding.Bytes(""))))))
       case _ => ???
     }
   }
 
   def query_announce_peer(args : Map[String,Bencoding.Entry]) : Option[Bencoding.Dict] = {
+    println("announce_peer")
     args.get("implied_port") match {
       case Some(Bencoding.Int(n)) if n!=0 =>
         // ignore port argument and use source of packet instead
@@ -147,8 +159,8 @@ object DHTMessage {
       case (Some(Bencoding.Bytes(id)),
             Some(Bencoding.Bytes(info_hash)),
             Some(Bencoding.Bytes(token))) =>
-        println("announce_peer")
-        Option(Bencoding.Dict(Map("id" -> Bencoding.Bytes("myid"))))
+        Option(Bencoding.Dict(Map("id" -> Bencoding.Bytes(new String(DHT.my_id))
+                                )))
       case _ => None
     }
   }
@@ -160,7 +172,7 @@ object DHTMessage {
 
   def error(list : List[Any]) = {
     println("error: " + list)
-    ???
+    None
   }
 }
 
