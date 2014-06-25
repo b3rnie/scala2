@@ -12,10 +12,15 @@ object DHT {
   }
 
   def distance(a : Array[Byte], b : Array[Byte]) : BigInt = {
+    require(a.size == b.size == 20)
     a.zip(b).foldLeft(BigInt(0))((acc,e) => {
       (acc << 8) + ((e._1 ^ e._2) & 0xFF)
     })
   }
+
+  //def intToArray(int : BigInt) : Array[Byte] = {
+  //  (0 to 20).map(n => (int >> n*8) & 0xFF)
+  //}
 }
 
 

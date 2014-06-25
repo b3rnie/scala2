@@ -1,19 +1,11 @@
 package bittorrent
 
-import akka.actor.Actor
-import akka.actor.ActorSystem
-
-import akka.actor.Props
-import akka.io.Udp
-
 object Main {
-  def main(args: Array[String]) {
-    val system = ActorSystem("ServerSystem")
-    val dhtServerActor = system.actorOf(Props(new DHTServer()), name = "dhtserver")
-
+  def main(args : Array[String]) {
+    val dhtServer = new DHTServer(6881)
     println("sleeping..")
-    Thread.sleep(20000L)
+    Thread.sleep(10000L)
     println("sleep done..")
-    dhtServerActor ! Udp.Unbind
+    dhtServer.stop
   }
 }

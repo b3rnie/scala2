@@ -11,6 +11,10 @@ object Bencoding{
     override def getMessage = s
   }
 
+  def decode(list : Array[Byte]) : Entry = {
+    decode(list.toArray)
+  }
+
   def decode(list : scala.List[Byte]) : Entry = {
     var(e, xs) = dec(list)
     if(xs.size != 0)
