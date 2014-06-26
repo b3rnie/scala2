@@ -5,12 +5,13 @@ import akka.io._
 import akka.util.ByteString
 import java.net._
 
-class UDPServer(port : Integer) {
-  val system = ActorSystem("ServerSystem")
+class UDPServer(port : Integer) extends Logging {
+  implicit val system = ActorSystem("ServerSystem")
   val ref    = system.actorOf(Props(new UDPServerActor(this, port)), name = "udpserver")
+  
 
   def packet(data : ByteString, sender : InetSocketAddress) = {
-    println("unimplemented!")
+    warn("unimplemented")
   }
 
   def send(data : Array[Byte], to : InetSocketAddress) = {
@@ -24,13 +25,17 @@ class UDPServer(port : Integer) {
 
 class UDPServerActor(daddy : UDPServer, port : Integer) extends Actor {
   import context.system
-  IO(Udp) ! Udp.Bind(self, new InetSocketAddress("0.0.0.0", port))
+  IO(Udp) ! Udp.Bind(self, new InetSocketAddress("0.0.0.0", 6881))
   def receive = {
     case Udp.Bound(local) =>
       println(sender)
       println(local)
-      println("bound!")
       context.become(ready(sender))
+    case Udp.Unbound =>
+      //context.stop(self)
+      context.system.shutdown()
+    case other =>
+      println(other)
   }
 
   def ready(ref : ActorRef) : Receive = {
@@ -39,13 +44,13 @@ class UDPServerActor(daddy : UDPServer, port : Integer) extends Actor {
     //ref ! Udp.Send(data, sender)
     case Udp.Send(data, to, _) => ref ! Udp.Send(data, to)
     case Udp.Unbind  => ref ! Udp.Unbind
-    case Udp.Unbound =>
-      //context.stop(self)
-      context.system.shutdown()
+      context.unbecome
   }
 }
 
 class DHTServer(port : Integer) extends UDPServer(port) {
+  // val logger = Logger(LoggerFactory.getLogger("name"))
+//  logger.debug("foo")
   override def packet(data : ByteString, sender : InetSocketAddress) = {
     try {
       var dec = Bencoding.decode(data.toList)
@@ -55,7 +60,7 @@ class DHTServer(port : Integer) extends UDPServer(port) {
       })
     } catch {
       case e : Bencoding.DecodeException => {
-        println("invalid incoming packet")
+        info("invalid incoming packet")
       }
       case e : Exception => {
         FileUtils.writeFile("/home/bernie/pkg")(p => {

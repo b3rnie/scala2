@@ -1,7 +1,7 @@
 package bittorrent
 
 object Bencoding{
-  abstract class Entry
+  sealed abstract class Entry
   case class Int(val int : scala.Int)           extends Entry
   case class List(val list : scala.List[Entry]) extends Entry
   case class Dict(val dict : Map[String,Entry]) extends Entry
