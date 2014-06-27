@@ -6,9 +6,14 @@ import akka.util.Timeout
 import akka.actor.{Actor, ActorSystem, Props}
 import akka.io.{IO,Tcp}
 
+import spray.routing.{HttpService, RequestContext}
+
 import spray.can.Http
 //import spray.util._
 import spray.http._
+
+import spray.httpx.marshalling.Marshaller
+import spray.httpx.unmarshalling.{MalformedContent, FromStringDeserializer}
 
 import HttpMethods._
 //import MediaTypes._
@@ -22,37 +27,74 @@ class HttpServer {
   }
 }
 
-class HttpServerActor extends Actor with Logging {
-  implicit val timeout: Timeout = 2.second // for the actor 'asks'
-  import context.system
+class HttpServerActor extends Actor with HttpRoutes {
+  // we use the enclosing ActorContext's or ActorSystem's dispatcher
+  // for our Futures and Scheduler
+  implicit def executionContext = actorRefFactory.dispatcher
 
-  def receive = {
-    case Http.Bound(address) =>
-      info("bound to " + address)
-    case Http.Unbound =>
-      info("unbound")
-      //context.stop(self)
-      context.system.shutdown()
-    case _: Http.Connected =>
-      // this actor
-      sender ! Http.Register(self)
-    case Http.PeerClosed =>
-    case HttpRequest(GET, Uri.Path("/announce"), _, _, _) =>
-      info("announce request")
-    case HttpRequest(GET, Uri.Path("/ping"), _, _, _) =>
-      sender ! HttpResponse(entity = "PONG!")
-    case _: HttpRequest =>
-      sender ! HttpResponse(status = 404, entity = "Unknown resource!")
+  //implicit val timeout: Timeout = 2.second // for the actor 'asks'
+  //import context.system
+
+  // the HttpService trait defines only one abstract member, which
+  // connects the services environment to the enclosing actor or test
+  def actorRefFactory = context
+
+  // this actor only runs our route, but you could add
+  // other things here, like request stream processing,
+  // timeout handling or alternative handler registration
+  def receive = runRoute(routes) orElse internalRequest
+
+  val internalRequest: Receive = {
     case Http.Unbind =>
+      warn("unbind request")
+      //context.stop(self)
       sender ! Http.Close
       context.system.shutdown()
-    case Timedout(HttpRequest(method, uri, _, _, _)) =>
-      warn("timeout")
-      sender ! HttpResponse(
-        status = 500,
-        entity = "The " + method + " request to '" + uri + "' has timed out..."
-      )
-     case other =>
-      warn("other msg " + other)
   }
 }
+
+trait HttpRoutes extends HttpService with Logging {
+  type HexString = String
+
+  implicit object _StringToHexString extends FromStringDeserializer[HexString] {
+    def apply(source: String) = {
+      //Right(source.toUpperCase)
+      Left(MalformedContent("Not a hexstring"))
+    }
+  }
+
+  val routes = {
+    get {
+      pathSingleSlash {
+        complete("/")
+      } ~
+      path("ping") {
+        complete("pong")
+      } ~
+      path("announce") {
+        parameters(//required
+                   "info_hash".as[HexString],
+                   "peer_id".as[HexString],
+                   "port".as[Int],
+                   "uploaded.as[Int]",
+                   "downloaded.as[Int]",
+                   "left.as[Int]",
+
+                   "ip".?,
+                   "event" ? "keepalive",
+                   "numwant".as[Int] ? 50,
+                   "no_peer_id".?,
+                   "compact".?) {
+          (info_hash, peer_id, port, uploaded, downloaded, left,
+           ip, event, numwant, no_peer_id, compact) =>
+          println(info_hash)
+          //println(ip)
+          //println(port)
+          complete("ok!")
+        }
+      }
+    }
+  }
+}
+
+
