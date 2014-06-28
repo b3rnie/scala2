@@ -6,7 +6,7 @@ object Main {
     val httpServer = new HttpServer()
 
     println("sleeping..")
-    Thread.sleep(2000L)
+    Thread.sleep(60000L)
     println("stopping dht server")
     dhtServer.stop
     println("stopping http server")
