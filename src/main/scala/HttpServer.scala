@@ -1,23 +1,11 @@
 package bittorrent
 
-import scala.concurrent.duration._
-import akka.pattern.ask
-import akka.util.Timeout
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import akka.io.{IO,Tcp}
-
-import spray.routing.{HttpService, RequestContext}
-
 import spray.can.Http
-//import spray.util._
 import spray.http._
-
-import spray.httpx.marshalling.Marshaller
-import spray.httpx.unmarshalling.{MalformedContent, FromStringDeserializer}
-
+import spray.routing.{HttpService, RequestContext}
 import HttpMethods._
-//import MediaTypes._
-
 import java.net.InetSocketAddress
 
 class HttpServer {
@@ -55,6 +43,8 @@ class ConnectionActor(remote : InetSocketAddress, connection : ActorRef) extends
       sender ! HttpResponse(status = 200, entity = "/")
     case HttpRequest(GET, Uri.Path("/ping"), _, _, _) =>
       sender ! HttpResponse(status = 200, entity = "pong")
+    case HttpRequest(GET, Uri.Path("/scrape"), _, _, _) =>
+      sender ! HttpResponse(status = 404, entity = "meh")
     case HttpRequest(GET, uri @ Uri.Path("/announce"), headers, _, _) =>
       /* So much work to avoid the UTF8 encoding in Uri/Uri.query
        * Must be a better way..
@@ -69,8 +59,10 @@ class ConnectionActor(remote : InetSocketAddress, connection : ActorRef) extends
                            java.nio.charset.Charset.forName("ISO8859-1"),
                            spray.http.Uri.ParsingMode.Relaxed)
           val rawquery = rawuri.query.toMap
-          info("query: " + rawquery.get("info_hash").get.size)
-          sender ! HttpResponse(entity = "announce")
+          //val q = TrackerParams.parseQuery(rawquery)
+          val res = Bencoding.encode(Bencoding.Dict(
+            Map("failure reason" -> Bencoding.Bytes("We failed!"))))
+          sender ! HttpResponse(entity = new String(res.toArray))
         case _ =>
           sender ! HttpResponse(status = 500, entity = "I cant configure software")
       }
@@ -89,44 +81,130 @@ class ConnectionActor(remote : InetSocketAddress, connection : ActorRef) extends
   }
 }
 
+sealed abstract class HttpTrackerRequest
+
+case class HttpAnnounceRequest (
+  // required
+  infoHash   : String,
+  peerId     : String,
+  port       : Int,
+  uploaded   : Long,
+  downloaded : Long,
+  left       : Long,
+  // optional
+  ip         : String, // ip/dns
+  event      : AnyRef,
+  numwant    : Int,
+  noPeerId   : Boolean,
+  compact    : Boolean
+) extends HttpTrackerRequest
+
+case class HttpScrapeRequest (
+
+) extends HttpTrackerRequest
 
 object TrackerParams {
-  val params = List(("info_hash", 'required, { }),
-                    ("peer_id",   'required, {}),
-                    ("port",      'required, {}),
-                    ("uploaded",  'required, {}),
-                    ("downloaded",'required, {}),
-                    ("left",      'required, {}),
-                    ("ip",        'optional, {}),
-                    ("event",     'optional, {}),
-                    ("numwant",   'optional, {}),
-                    ("no_peer_id", 'optional, {}),
-                    ("compact",    'optional, {})
-                  )
-
-  def parseQuery(query : Map[String,String]) : Map[String, Any] = {
-    
+  def p_info_hash(x : Option[String]) = {
+    assert(x.get.length == 20)
+    x.get
+  }
+  def p_peer_id(x : Option[String]) = {
+    assert(x.get.length == 20)
+    x.get
   }
 
+  def p_port(x : Option[String]) = {
+    val v= x.get.toInt
+    assert(v > 0 && v <= 65535)
+    v
+  }
 
-/*
-                   "peer_id".as[HexString],
-                   "port".as[Int],
-                   "uploaded".as[Int],
-                   "downloaded".as[Int],
-                   "left".as[Int],
-                   // optional
-                   "ip".?,
-                   "event" ? "keepalive",
-                   // extensions
-                   "numwant".as[Int] ? 50,
-                   "no_peer_id".?,
-                   "compact".?) {
-          (info_hash, peer_id, port, uploaded, downloaded, left,
-           ip, event, numwant, no_peer_id, compact) =>
-          println("info hash: " + info_hash)
-          println("peer id: " + peer_id)
-          //println(ip)
-          //println(port)
-          complete("ok!")
-        } */
+  def p_uploaded(x : Option[String]) = {
+    val v = x.get.toLong
+    assert(v >= 0)
+    v
+  }
+
+  def p_downloaded(x : Option[String]) = {
+    val v = x.get.toLong
+    assert(v >= 0)
+    v
+  }
+
+  def p_left(x : Option[String]) = {
+    val v = x.get.toLong
+    assert(v >= 0)
+    v
+  }
+
+  def p_ip(x : Option[String]) = {
+    x match {
+      case Some(dnsOrIp) => dnsOrIp
+      case None          => ""
+    }
+  }
+
+  def p_event(x : Option[String]) = {
+    x match {
+      case Some("started")   => 'started
+      case Some("completed") => 'completed
+      case Some("stopped")   => 'stopped
+      case _                 => 'keepalive
+    }
+  }
+
+  def p_numwant(x : Option[String]) = {
+    x match {
+      case Some(str) =>
+        val v = str.toInt
+        assert(v >= 0)
+        v
+      case None      => 50
+    }
+  }
+
+  def p_no_peer_id(x : Option[String]) = {
+    x match {
+      case(Some(_)) => true
+      case _        => false
+    }
+  }
+
+  def p_compact(x : Option[String]) = {
+    x match {
+      case Some("1") => true
+      case _         => false
+    }
+  }
+
+  def p_key(x : Option[String]) = {
+    x match {
+      case Some(str) => str
+      case _         => ""
+    }
+  }
+
+  def p_trackerid(x : Option[String]) = {
+    x match {
+      case Some(str) => str
+      case _         => ""
+    }
+  }
+
+  def parseQuery(q : Map[String,String]) : HttpAnnounceRequest = {
+    HttpAnnounceRequest(
+      infoHash   = p_info_hash(q.get("info_hash")),
+      peerId     = p_peer_id(q.get("peer_id")),
+      port       = p_port(q.get("port")),
+      uploaded   = p_uploaded(q.get("uploaded")),
+      downloaded = p_downloaded(q.get("downloaded")),
+      left       = p_left(q.get("left")),
+      ip         = p_ip(q.get("ip")),
+      event      = p_event(q.get("event")),
+      numwant    = p_numwant(q.get("numwant")),
+      noPeerId   = p_no_peer_id(q.get("nopeerid")),
+      compact    = p_compact(q.get("compact"))
+    )
+  }
+  //case (None,     'required) => throw(new Exception("missing param " + p._1))
+}
