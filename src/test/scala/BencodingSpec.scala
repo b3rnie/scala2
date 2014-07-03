@@ -16,6 +16,10 @@ class BencodingSpec extends FlatSpec {
     assert(original_bytes === encoded_bytes)
   }
 
+  //"3:foo" must "produce a string 'foo'" in {
+  //  Bencoding.decode("3:foo".toArray)
+  //}
+
 //  it should "throw NoSuchElementException if an empty stack is popped" in {
 //    val emptyStack = new Stack[String]
 //    intercept[NoSuchElementException] {

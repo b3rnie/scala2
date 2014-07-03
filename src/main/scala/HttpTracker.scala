@@ -45,36 +45,33 @@ class HttpTrackerConnectionActor(
       sender ! HttpResponse(status = 200, entity = "/")
     case HttpRequest(GET, Uri.Path("/ping"), _, _, _) =>
       sender ! HttpResponse(status = 200, entity = "pong")
-    case HttpRequest(GET, Uri.Path("/scrape"), _, _, _) =>
-      sender ! HttpResponse(status = 404, entity = "meh")
-    case HttpRequest(GET, uri @ Uri.Path("/announce"), headers, _, _) =>
-      /* So much work to avoid the UTF8 encoding in Uri/Uri.query
-       * Must be a better way..
-       */
-      headers.find(_ match {
-        case HttpHeaders.`Raw-Request-URI`(x) => true
-        case _                                => false
-      }) match {
-        case Some(HttpHeaders.`Raw-Request-URI`(str)) =>
-          val rawuri = Uri(str,
-                           java.nio.charset.Charset.forName("ISO8859-1"),
-                           spray.http.Uri.ParsingMode.Relaxed)
-          val rawquery = rawuri.query.toMap
-          try {
-            val req = parseAnnounceRequest(rawquery)
-            val res = Tracker.handleRequest(req)
-            val rep = generateReply(req, res)
-            sender ! HttpResponse(entity = rep)
-// new String(Bencoding.encode(resp).toArray))
-          } catch {
-            case e : ParseException => {
-              val resp = Bencoding.encode(Bencoding.Dict(
-                Map("failure reason" -> Bencoding.Bytes(e.getMessage))))
-              sender ! HttpResponse(entity = new String(resp.toArray))
-            }
-          }
-        case _ =>
-          sender ! HttpResponse(status = 500, entity = "I cant configure software")
+    case HttpRequest(GET, Uri.Path("/scrape"), headers, _, _) =>
+      try {
+        val req = HttpTrackerRequest.parseScrapeRequest(remote,
+                                                        getQuery(headers))
+        val res = Tracker.handleRequest(req)
+        val rep = HttpTrackerRequest.generateReply(req, res)
+        sender ! HttpResponse(entity = rep)
+      } catch {
+        case e : HttpTrackerRequest.ParseException =>
+          sender ! HttpResponse(status = 400, entity = "You fucked up")
+      }
+    case HttpRequest(GET, Uri.Path("/announce"), headers, _, _) =>
+      try {
+        val req = HttpTrackerRequest.parseAnnounceRequest(remote,
+                                                          getQuery(headers))
+        val res = Tracker.handleRequest(req)
+        val rep = HttpTrackerRequest.generateReply(req, res)
+        sender ! HttpResponse(entity = rep)
+        // new String(Bencoding.encode(resp).toArray))
+      } catch {
+        case e : HttpTrackerRequest.ParseException => {
+          val resp = Bencoding.encode(Bencoding.Dict(
+            Map("failure reason" -> Bencoding.Bytes(e.getMessage))))
+          sender ! HttpResponse(entity = new String(resp.toArray))
+        }
+        case _ : Exception =>
+          sender ! HttpResponse(status = 500, entity = "Internal Error")
       }
     case _: HttpRequest =>
       sender ! HttpResponse(status = 404, entity = "sod off")
@@ -87,15 +84,35 @@ class HttpTrackerConnectionActor(
       context.unwatch(connection)
       context.stop(self)
     case Timedout(HttpRequest(method, uri, _, _, _)) =>
-      warn("timeout")
+      warn("Request timed out")
       sender ! HttpResponse(
         status = 500,
         entity = "The " + method + " request to '" + uri + "' has timed out..."
       )
     case other =>
-      println("OTHER MSG: " + other)
+      warn("OTHER MSG: " + other)
   }
 
+  def getQuery(headers : List[HttpHeader]) : Uri.Query = {
+    /* So much work to avoid the UTF8 encoding in Uri/Uri.query
+     * Must be a better way..
+     */
+    headers.find(_ match {
+      case HttpHeaders.`Raw-Request-URI`(x) => true
+      case _                                => false
+    }) match {
+      case Some(HttpHeaders.`Raw-Request-URI`(str)) =>
+        val rawuri = Uri(str,
+                         java.nio.charset.Charset.forName("ISO8859-1"),
+                         spray.http.Uri.ParsingMode.Relaxed)
+        rawuri.query
+      case _ =>
+        throw new Exception("misconfigured spray server")
+    }
+  }
+}
+
+object HttpTrackerRequest {
   case class ParseException(s : String) extends Exception {
     override def getMessage = s
   }
@@ -129,7 +146,7 @@ class HttpTrackerConnectionActor(
     v
   }
 
-  def parseIp(x : Option[String]) = {
+  def parseIp(x : Option[String], remote : InetSocketAddress) = {
     x match {
       case Some(dnsOrIp) => dnsOrIp // checkme!
       case None          => remote.getAddress.getHostAddress
@@ -183,7 +200,9 @@ class HttpTrackerConnectionActor(
     }
   }
 
-  def parseAnnounceRequest(q : Map[String,String]) : Tracker.AnnounceRequest = {
+  def parseAnnounceRequest(remote : InetSocketAddress,
+                           query : Uri.Query) : Tracker.AnnounceRequest = {
+    val q = query.toMap
     Tracker.AnnounceRequest(
       // required
       infoHash   = parse20Bytes("info_hash", getRequired("info_hash", q)),
@@ -193,7 +212,7 @@ class HttpTrackerConnectionActor(
       downloaded = parseLong("downloaded",   getRequired("downloaded", q)),
       left       = parseLong("left",         getRequired("left", q)),
       // optional
-      ip         = parseIp(q.get("ip")),
+      ip         = parseIp(q.get("ip"), remote),
       event      = parseEvent(q.get("event")),
       numwant    = parseNumwant(q.get("numwant")),
       noPeerId   = parseNoPeerId(q.get("no_peer_id")),
@@ -202,6 +221,12 @@ class HttpTrackerConnectionActor(
       trackerId  = parseTrackerId(q.get("trackerid"))
     )
   }
+  
+  def parseScrapeRequest(remote : InetSocketAddress,
+                         query : Uri.Query) : Tracker.ScrapeRequest = {
+    //query.getAll
+    ???
+  }
 
   def getRequired(field : String, q : Map[String,String]) : String = {
     q.get(field) match {
@@ -209,13 +234,15 @@ class HttpTrackerConnectionActor(
       case None      => throw(new ParseException("missing parameter " + field))
     }
   }
+
   
-  def generateReply(req : Tracker.AnnounceRequest,
+
+  def generateReply(req : Tracker.Request,
                     rep : Tracker.Reply) = {
     rep match {
       case rep : Tracker.AnnounceReplyError =>
         Bencoding.encode(Bencoding.Dict(
-          Map("failure reason" -> Bencoding.Bytes(rep.failureReason)))).toArray
+          Map("failure reason" -> Bencoding.Bytes(rep.failureReason))))
       case rep : Tracker.AnnounceReplyOk =>
         Bencoding.encode(
           Bencoding.Dict(
@@ -224,7 +251,7 @@ class HttpTrackerConnectionActor(
                 "tracker id"      -> Bencoding.Bytes(rep.trackerId),
                 "complete"        -> Bencoding.Int(rep.complete),
                 "incomplete"      -> Bencoding.Int(rep.incomplete),
-                "peers"           -> Bencoding.List(List())))).toArray
+                "peers"           -> Bencoding.List(List()))))
     }
   }
 }

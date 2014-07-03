@@ -56,4 +56,7 @@ object Tracker {
       failureReason = "sod off!"
     )
   }
+  def handleRequest(req : ScrapeRequest) : Reply = {
+    ???
+  }
 }

@@ -52,9 +52,9 @@ class DhtServer(port : Integer) extends UdpServer(port) {
 //  logger.debug("foo")
   override def packet(data : ByteString, sender : InetSocketAddress) = {
     try {
-      var dec = Bencoding.decode(data.toList)
+      var dec = Bencoding.decode(data.iterator.buffered)
       DHTMessage.message(dec).foreach( resp => {
-        val resp2 = Bencoding.encode(resp).toArray
+        val resp2 = Bencoding.encode(resp)
         super.send(resp2, sender)
       })
     } catch {
