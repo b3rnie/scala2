@@ -38,24 +38,18 @@ object Tracker {
     failureReason : String
   ) extends Reply
 
- 
   def handleRequest(req : AnnounceRequest) : Reply = {
-    /* r.event match {
-      case 'started   => TrackerStore.insert()
-      case 'completed => TrackerStore.done()
-      case 'stopped   => TrackerStore.remove()
-      case 'keepalive => TrackerStore.update()
+    req.event match {
+      case 'started   => TrackerStore.insert(req)
+      case 'keepalive => TrackerStore.update(req)
+      case 'completed => TrackerStore.done(req)
+      case 'stopped   => TrackerStore.remove(req)
     }
-    val peers =
-      if(numwant == 0) {
-        List()
-      } else {
-        List()
-      } */
     AnnounceReplyError(
       failureReason = "sod off!"
     )
   }
+
   def handleRequest(req : ScrapeRequest) : Reply = {
     ???
   }

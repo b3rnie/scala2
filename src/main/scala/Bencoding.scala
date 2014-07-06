@@ -27,21 +27,25 @@ object Bencoding{
             case 'i' => decodeInt(input)
             case 'l' => decodeList(input)
             case 'd' => decodeDict(input)
-            case c   => throw new DecodeException("unexpected character in input")
+            case c   =>
+              throw new DecodeException("unexpected character")
           }
       }
     } catch {
       case e: java.util.NoSuchElementException =>
-        ???
+        throw new DecodeException("unexpected end of data")
     }
   }
 
   def decodeInt(input : BufferedIterator[Byte],
                 acc   : StringBuilder = new StringBuilder()) : Int = {
     input.next match {
-      case 'e'                => Int(acc.toString.toInt)
-      case c if(isIntByte(c)) => decodeInt(input, acc.append(c.toChar))
-      case c                  => throw new DecodeException("unexpected character while decoding integer")
+      case 'e' =>
+        Int(acc.toString.toInt)
+      case c if(isIntByte(c)) =>
+        decodeInt(input, acc.append(c.toChar))
+      case c =>
+        throw new DecodeException("unexpected character in integer")
     }
   }
 
@@ -61,7 +65,7 @@ object Bencoding{
                  acc   : Map[String,Entry] = Map()) : Dict = {
     input.head match {
       case 'e' =>
-        input.next
+        input.take(1)
         Dict(acc)
       case _ =>
         val Bytes(k) = decodeBytes(input)
@@ -73,14 +77,19 @@ object Bencoding{
   def decodeBytes(input : BufferedIterator[Byte],
                   acc   : StringBuilder = new StringBuilder()) : Bytes = {
     input.next match {
+      case ':' if acc.length == 0 =>
+        throw new DecodeException("illegal byte length")
       case ':' =>
         val n = acc.toString.toInt
         val b = input.take(n)
-        Bytes(new String(b.toArray.map(_.toChar)))
+        val a = b.toArray
+        if(b.size != n)
+          throw new DecodeException("premature end of bytes")
+        Bytes(new String(a.map(_.toChar)))
       case c if isIntByte(c) =>
         decodeBytes(input, acc.append(c.toChar))
       case _ =>
-        throw new Exception("illegal character")
+        throw new DecodeException("unexpected character in bytes")
     }
   }
 
