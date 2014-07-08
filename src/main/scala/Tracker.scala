@@ -45,9 +45,15 @@ object Tracker {
       case 'completed => TrackerStore.done(req)
       case 'stopped   => TrackerStore.remove(req)
     }
-    AnnounceReplyError(
-      failureReason = "sod off!"
-    )
+    val peers = TrackerStore.getPeers(req.infoHash, req.numwant)
+    AnnounceReplyOk(interval = 300,
+                    trackerId = "abc",
+                    complete  = 123,
+                    incomplete = 456,
+                    peers      = peers)
+    //AnnounceReplyError(
+    //  failureReason = "sod off!"
+    //)
   }
 
   def handleRequest(req : ScrapeRequest) : Reply = {
