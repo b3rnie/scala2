@@ -1,4 +1,4 @@
-package bittorrent
+package tracker
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import akka.io.{IO,Tcp}
@@ -10,15 +10,16 @@ import java.net.InetSocketAddress
 
 class HttpTracker(port : Int) {
   implicit val system = ActorSystem("http")
-  val ref             = system.actorOf(Props(new HttpTrackerActor()), name = "http_tracker")
-  IO(Http) ! Http.Bind(ref, interface = "localhost", port = port)
+  val ref             = system.actorOf(Props(new HttpTrackerActor(port)), name = "http")
+  
   def stop = {
     ref ! Http.Unbind
   }
 }
 
-class HttpTrackerActor extends Actor with Logging {
+class HttpTrackerActor(port : Int) extends Actor with Logging {
   import context.system
+  IO(Http) ! Http.Bind(self, interface = "localhost", port = port)
   def receive: Receive = {
     case Http.Bound(address) =>
       info("bound to " + address)
@@ -201,9 +202,9 @@ object HttpTrackerRequest {
   }
 
   def parseAnnounceRequest(remote : InetSocketAddress,
-                           query : Uri.Query) : Tracker.AnnounceRequest = {
+                           query  : Uri.Query) : AnnounceRequest = {
     val q = query.toMap
-    Tracker.AnnounceRequest(
+    AnnounceRequest(
       // required
       infoHash   = parse20Bytes("info_hash", getRequired("info_hash", q)),
       peerId     = parse20Bytes("peer_id",   getRequired("peer_id", q)),
@@ -223,7 +224,7 @@ object HttpTrackerRequest {
   }
   
   def parseScrapeRequest(remote : InetSocketAddress,
-                         query : Uri.Query) : Tracker.ScrapeRequest = {
+                         query  : Uri.Query) : ScrapeRequest = {
     //query.getAll
     ???
   }
@@ -235,15 +236,13 @@ object HttpTrackerRequest {
     }
   }
 
-  
-
-  def generateReply(req : Tracker.Request,
-                    rep : Tracker.Reply) = {
+  def generateReply(req : Request,
+                    rep : Reply) = {
     rep match {
-      case rep : Tracker.AnnounceReplyError =>
+      case rep : AnnounceReplyError =>
         Bencoding.encode(Bencoding.Dict(
           Map("failure reason" -> Bencoding.Bytes(rep.failureReason))))
-      case rep : Tracker.AnnounceReplyOk =>
+      case rep : AnnounceReplyOk =>
         Bencoding.encode(
           Bencoding.Dict(
             Map("interval"        -> Bencoding.Int(rep.interval),
@@ -252,6 +251,8 @@ object HttpTrackerRequest {
                 "complete"        -> Bencoding.Int(rep.complete),
                 "incomplete"      -> Bencoding.Int(rep.incomplete),
                 "peers"           -> Bencoding.List(List()))))
+      case rep : ScrapeReplyError => ???
+      case rep : ScrapeReplyOk => ???
     }
   }
 }

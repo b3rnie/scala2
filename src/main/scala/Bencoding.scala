@@ -1,4 +1,4 @@
-package bittorrent
+package tracker
 
 import scala.collection.BufferedIterator
 

@@ -1,4 +1,4 @@
-package bittorrent
+package tracker
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.io._
@@ -7,7 +7,7 @@ import java.net._
 
 class UdpServer(port : Integer) extends Logging {
   implicit val system = ActorSystem("ServerSystem")
-  val ref    = system.actorOf(Props(new UdpServerActor(this, port)), name = "udpserver")
+  val ref    = system.actorOf(Props(new UdpServerActor(this, port)), name = "udp")
 
   def packet(data : ByteString, sender : InetSocketAddress) = {
     warn("unimplemented")

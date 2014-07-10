@@ -1,4 +1,4 @@
-package bittorrent
+package tracker
 
 import org.slf4j.{Logger, LoggerFactory}
 
