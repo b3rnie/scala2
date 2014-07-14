@@ -1,17 +1,22 @@
 package tracker
 
 /* */
-case class Hash (
+case class Infohash (
   hash : String) {
-  require(hash.length() == 20, "Hash is too short")
+  require(hash.length() == 20, "Infohash is too short")
+}
+
+case class PeerId (
+  hash : String) {
+  require(hash.length() == 20, "PeerId is too short")
 }
 
 /* Requests */
 sealed abstract class Request
 case class AnnounceRequest (
   // required
-  infoHash   : String, // FIXME: types!
-  peerId     : String,
+  infoHash   : Infohash,
+  peerId     : PeerId,
   port       : Int,
   uploaded   : Long,
   downloaded : Long,
@@ -27,7 +32,7 @@ case class AnnounceRequest (
 ) extends Request
 
 case class ScrapeRequest (
-  infoHashes : List[String]
+  hashes : List[Infohash]
 ) extends Request
 
 /* Replies */
@@ -37,7 +42,7 @@ case class AnnounceReplyOk (
   trackerId  : String,
   complete   : Int,
   incomplete : Int,
-  peers      : List[Tuple3[String,String,Int]]
+  peers      : List[Tuple3[PeerId,String,Int]]
 ) extends Reply
 
 case class AnnounceReplyError (

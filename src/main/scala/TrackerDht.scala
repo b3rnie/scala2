@@ -5,13 +5,12 @@ import akka.io._
 import akka.util.ByteString
 import java.net._
 
-class UdpServer(port : Integer) extends Logging {
+trait UdpServer extends Logging {
   implicit val system = ActorSystem("ServerSystem")
-  val ref    = system.actorOf(Props(new UdpServerActor(this, port)), name = "udp")
-
-  def packet(data : ByteString, sender : InetSocketAddress) = {
-    warn("unimplemented")
-  }
+  val ref    = system.actorOf(Props(new UdpServerActor(this, port)),
+                              name = "udp")
+  val port : Int
+  def packet(data : ByteString, sender : InetSocketAddress) : Unit
 
   def send(data : Array[Byte], to : InetSocketAddress) = {
     ref ! Udp.Send(ByteString(new String(data)), to)
@@ -47,10 +46,11 @@ class UdpServerActor(daddy : UdpServer, port : Integer) extends Actor {
   }
 }
 
-class DhtServer(port : Integer) extends UdpServer(port) {
+class DhtServer(val port : Int) extends UdpServer {
   // val logger = Logger(LoggerFactory.getLogger("name"))
-//  logger.debug("foo")
-  override def packet(data : ByteString, sender : InetSocketAddress) = {
+  //  logger.debug("foo")
+
+  def packet(data : ByteString, sender : InetSocketAddress) = {
     try {
       var dec = Bencoding.decode(data.iterator.buffered)
       DHTMessage.message(dec).foreach( resp => {

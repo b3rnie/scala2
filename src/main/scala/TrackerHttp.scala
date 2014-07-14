@@ -11,7 +11,6 @@ import java.net.InetSocketAddress
 class HttpTracker(port : Int) {
   implicit val system = ActorSystem("http")
   val ref             = system.actorOf(Props(new HttpTrackerActor(port)), name = "http")
-  
   def stop = {
     ref ! Http.Unbind
   }
@@ -118,10 +117,16 @@ object HttpTrackerRequest {
     override def getMessage = s
   }
 
-  def parse20Bytes(what : String, str : String) = {
+  def parseInfohash(str : String) = {
     if(str.length != 20)
-      throw new ParseException(what + " not 20 bytes")
-    str
+      throw new ParseException("infohash not 20 bytes")
+    Infohash(str)
+  }
+
+  def parsePeerId(str : String) = {
+    if(str.length != 20)
+      throw new ParseException("peer_id not 20 bytes")
+    PeerId(str)
   }
 
   def parsePort(str : String) = {
@@ -206,8 +211,8 @@ object HttpTrackerRequest {
     val q = query.toMap
     AnnounceRequest(
       // required
-      infoHash   = parse20Bytes("info_hash", getRequired("info_hash", q)),
-      peerId     = parse20Bytes("peer_id",   getRequired("peer_id", q)),
+      infoHash   = parseInfohash(            getRequired("info_hash", q)),
+      peerId     = parsePeerId(              getRequired("peer_id", q)),
       port       = parsePort(                getRequired("port", q)),
       uploaded   = parseLong("uploaded",     getRequired("uploaded", q)),
       downloaded = parseLong("downloaded",   getRequired("downloaded", q)),
