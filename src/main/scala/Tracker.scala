@@ -50,7 +50,7 @@ case class AnnounceReplyError (
 ) extends Reply
 
 case class ScrapeReplyOk (
-  files : List[Tuple3[Long,Long,Long]] // FIXME: complete,downloaded,incomplete
+  files : Map[Infohash, Tuple3[Long,Long,Long]] // FIXME: complete,downloaded,incomplete
 ) extends Reply
 
 case class ScrapeReplyError (

@@ -17,6 +17,7 @@ trait UdpServer extends Logging {
   }
 
   def stop = {
+    info("stopping udpserver")
     ref ! Udp.Unbind
   }
 }
@@ -46,7 +47,7 @@ class UdpServerActor(daddy : UdpServer, port : Integer) extends Actor {
   }
 }
 
-class DhtServer(val port : Int) extends UdpServer {
+class DhtTracker(val port : Int) extends UdpServer {
   // val logger = Logger(LoggerFactory.getLogger("name"))
   //  logger.debug("foo")
 

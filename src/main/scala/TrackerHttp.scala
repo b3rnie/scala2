@@ -8,10 +8,11 @@ import spray.routing.{HttpService, RequestContext}
 import HttpMethods._
 import java.net.InetSocketAddress
 
-class HttpTracker(port : Int) {
+class HttpTracker(port : Int) extends Logging {
   implicit val system = ActorSystem("http")
   val ref             = system.actorOf(Props(new HttpTrackerActor(port)), name = "http")
   def stop = {
+    info("stopping http tracker")
     ref ! Http.Unbind
   }
 }
@@ -36,7 +37,7 @@ class HttpTrackerActor(port : Int) extends Actor with Logging {
 }
 
 class HttpTrackerConnectionActor(
-  remote : InetSocketAddress,
+  remote     : InetSocketAddress,
   connection : ActorRef) extends Actor with Logging {
 
   context.watch(connection)
@@ -63,7 +64,6 @@ class HttpTrackerConnectionActor(
         val res = Tracker.handleRequest(req)
         val rep = HttpTrackerRequest.generateReply(req, res)
         sender ! HttpResponse(entity = rep)
-        // new String(Bencoding.encode(resp).toArray))
       } catch {
         case e : HttpTrackerRequest.ParseException => {
           val resp = Bencoding.encode(Bencoding.Dict(
@@ -227,11 +227,10 @@ object HttpTrackerRequest {
       trackerId  = parseTrackerId(q.get("trackerid"))
     )
   }
-  
+
   def parseScrapeRequest(remote : InetSocketAddress,
                          query  : Uri.Query) : ScrapeRequest = {
-    //query.getAll
-    ???
+    ScrapeRequest(hashes = query.getAll("info_hash").map(parseInfohash(_)))
   }
 
   def getRequired(field : String, q : Map[String,String]) : String = {
@@ -257,7 +256,17 @@ object HttpTrackerRequest {
                 "incomplete"      -> Bencoding.Int(rep.incomplete),
                 "peers"           -> Bencoding.List(List()))))
       case rep : ScrapeReplyError => ???
-      case rep : ScrapeReplyOk => ???
+      case rep : ScrapeReplyOk =>
+        Bencoding.encode(
+          Bencoding.Dict(
+            Map("files" -> Bencoding.Dict(
+              rep.files.map {
+                case (k,v) =>
+                  (k.hash, Bencoding.Dict(
+                    Map("complete" -> Bencoding.Int(v._1.toInt),
+                        "downloaded" -> Bencoding.Int(v._2.toInt),
+                        "incomplete" -> Bencoding.Int(v._3.toInt)))) // FIXME int/long
+              }))))
     }
   }
 }
