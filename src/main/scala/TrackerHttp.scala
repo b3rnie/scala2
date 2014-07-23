@@ -263,9 +263,9 @@ object HttpTrackerRequest {
               rep.files.map {
                 case (k,v) =>
                   (k.hash, Bencoding.Dict(
-                    Map("complete" -> Bencoding.Int(v._1.toInt),
-                        "downloaded" -> Bencoding.Int(v._2.toInt),
-                        "incomplete" -> Bencoding.Int(v._3.toInt)))) // FIXME int/long
+                    Map("complete" -> Bencoding.Int(v.complete.toInt),
+                        "downloaded" -> Bencoding.Int(v.downloaded.toInt),
+                        "incomplete" -> Bencoding.Int(v.incomplete.toInt)))) // FIXME int/long
               }))))
     }
   }

@@ -50,7 +50,7 @@ case class AnnounceReplyError (
 ) extends Reply
 
 case class ScrapeReplyOk (
-  files : Map[Infohash, Tuple3[Long,Long,Long]] // FIXME: complete,downloaded,incomplete
+  files : Map[Infohash, TorrentStats]
 ) extends Reply
 
 case class ScrapeReplyError (
@@ -59,6 +59,7 @@ case class ScrapeReplyError (
 
 case class TorrentStats (
   complete   : Int = 0,
+  downloaded : Int = 0,
   incomplete : Int = 0
 )
 
@@ -80,12 +81,16 @@ object Tracker {
                     complete   = stats.complete,
                     incomplete = stats.incomplete,
                     peers      = peers)
-    //AnnounceReplyError(
-    //  failureReason = "sod off!"
-    //)
   }
 
   def handleRequest(req : ScrapeRequest) : Reply = {
-    ???
+    req.hashes.isEmpty match {
+      case true  => ScrapeReplyOk(files = Map())
+      case false =>
+        ScrapeReplyOk(files = req.hashes.map(infohash => {
+          val stats = TrackerStore.getStats(infohash)
+          Tuple2(infohash, TrackerStore.getStats(infohash))
+        }).toMap)
+    }
   }
 }

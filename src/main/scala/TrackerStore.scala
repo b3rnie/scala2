@@ -4,7 +4,6 @@ import java.io.{FileOutputStream,
                 BufferedOutputStream,
                 RandomAccessFile,
                 File}
-
 import akka.actor.{Actor, ActorSystem, Props}
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.{HashSet, SynchronizedSet}
@@ -13,12 +12,17 @@ import scala.util.Random
 import com.typesafe.config.ConfigFactory
 
 object TrackerStore extends Logging {
+  sealed trait PeerState
+  case object Online extends PeerState
+  case object Offline extends PeerState
+
   case class PeerData (
     uploaded   : Long,
     downloaded : Long,
     left       : Long,
     ip         : String,
     port       : Int,
+    state      : PeerState,
     time       : Long = System.currentTimeMillis
   )
   case class PeerAddress (
@@ -57,7 +61,8 @@ object TrackerStore extends Logging {
                        downloaded = req.downloaded,
                        left       = req.left,
                        ip         = req.ip,
-                       port       = req.port
+                       port       = req.port,
+                       state      = Online
                      )) match {
       case Some(_) =>
       case None    =>
@@ -73,11 +78,12 @@ object TrackerStore extends Logging {
   }
 
   def remove(req : AnnounceRequest) = {
-    // FIXME: dont delete only mark as offline or something
-    peers.remove(Tuple2(req.peerId, req.infoHash)) match {
-      case Some(_) => true
-      case None    => false
-    }
+    val k = Tuple2(req.peerId, req.infoHash)
+    peers.get(k).foreach(peerdata => {
+      peers.put(k, peerdata.copy(state = Offline,
+                                 time  = System.currentTimeMillis
+                               ))
+    })
   }
 
   def getPeers(infohash : Infohash,
@@ -98,7 +104,7 @@ object TrackerStore extends Logging {
     }
   }
 
-  /* Periodically update index */
+  /* Periodically update index, mark 'disappeared' nodes as offline */
   class IndexActor extends Actor {
     import system.dispatcher
     val TIMEOUT = 300000
@@ -116,42 +122,41 @@ object TrackerStore extends Logging {
 
     def gcIndex() = {
       val tsnow = System.currentTimeMillis
-      torrents.iterator.foreach(e => {
-        val hash = e._1
-        val set  = e._2
-        set.filter(p => {
-          p match {
-            case PeerAddress(_, _, _, time) if isFresh(tsnow, time) => true
-            case PeerAddress(_, _, _, _)                            => false
+      torrents.iterator.foreach {
+        case (hash, set) =>
+          set.filter(p => {
+            p match {
+              case PeerAddress(_, _, _, time) if isFresh(tsnow, time) => true
+              case PeerAddress(_, _, _, _)                            => false
+            }
+          })
+          if(set.size == 0) {
+            torrents.remove(hash)
           }
-        })
-        if(set.size == 0) {
-          torrents.remove(hash)
-        }
-      })
+      }
     }
 
     def updateIndex() = {
       val tsnow = System.currentTimeMillis
       peers.iterator.foreach {
-        case (key, PeerData(_,_,_,_,_,time)) if !isFresh(tsnow, time) => None
-        case ((peerId, infohash), PeerData(_,_,_,ip,port,_)) => {
-          val peerAddress = PeerAddress(peerId, ip, port)
+        case (key,      PeerData(_,_,_,_,_,Offline,_   )) => None
+        case (key, pd @ PeerData(_,_,_,_,_,Online, time)) if !isFresh(tsnow, time) =>
+          peers.put(key, pd.copy(state = Offline))
+        case ((peerid, infohash), PeerData(_,_,_,ip,port,_,_)) =>
+          val peeraddress = PeerAddress(peerid, ip, port)
           torrents.get(infohash) match {
             case Some(set) =>
               // must be a better way..
-              set -= peerAddress
-              set += peerAddress
+              set -= peeraddress
+              set += peeraddress
             case None =>
               val set = new HashSet[PeerAddress]
                         with SynchronizedSet[PeerAddress]
-              set += peerAddress
-              torrents.putIfAbsent(infohash, set) match {
-                case Some(set) => set+= peerAddress
-                case None      =>
-              }
+              set += peeraddress
+              torrents.putIfAbsent(infohash, set).foreach(newset => {
+                newset += peeraddress
+              })
           }
-        }
       }
     }
 
@@ -171,26 +176,32 @@ object TrackerStore extends Logging {
 
     def receive = {
       case 'tick =>
-        val newStats = new TrieMap[Infohash, TorrentStats]
+        val newstats = new TrieMap[Infohash, TorrentStats]
         peers.iterator.foreach {
-          case ((peerId, infohash), PeerData(_,_,0,_,_,_)) => {
-            newStats.get(infohash) match {
-              case Some(TorrentStats(c,i)) => newStats.put(infohash,
-                                                           TorrentStats(c+1, i))
-              case None                    => newStats.put(infohash,
-                                                           TorrentStats(1, 0))
+          case ((peerid, infohash), PeerData(_,_,0,_,_,Offline,_)) =>
+            newstats.get(infohash) match {
+              case Some(TorrentStats(complete,downloaded,incomplete)) =>
+                newstats.put(infohash, TorrentStats(complete,downloaded+1,incomplete))
+              case None =>
+                newstats.put(infohash, TorrentStats(0, 1, 0))
+            }
+          case ((peerid, infohash), PeerData(_,_,_,_,_,Offline,_)) => None
+          case ((peerid, infohash), PeerData(_,_,0,_,_,Online,_ )) =>
+            newstats.get(infohash) match {
+              case Some(TorrentStats(complete,downloaded,incomplete)) =>
+                newstats.put(infohash, TorrentStats(complete+1,downloaded+1,incomplete))
+              case None =>
+                newstats.put(infohash, TorrentStats(1, 1, 0))
+            }
+          case ((peerid, infohash), PeerData(_,_,_,_,_,Online,_)) =>
+            newstats.get(infohash) match {
+              case Some(TorrentStats(complete,downloaded,incomplete)) =>
+                newstats.put(infohash, TorrentStats(complete, downloaded, incomplete + 1))
+              case None =>
+                newstats.put(infohash, TorrentStats(0, 0, 1))
             }
           }
-          case ((peerId, infohash), PeerData(_,_,_,_,_,_)) => {
-            newStats.get(infohash) match {
-              case Some(TorrentStats(c,i)) => newStats.put(infohash,
-                                                           TorrentStats(c, i+1))
-              case None                    => newStats.put(infohash,
-                                                           TorrentStats(0, 1))
-            }
-          }
-        }
-        stats ++= newStats
+        stats ++= newstats
         system.scheduler.scheduleOnce(5.seconds, self, 'tick)
     }
   }
