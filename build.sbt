@@ -1,24 +1,34 @@
-name := "scala2"
+name := "tracker"
 
-version := "1.0"
+version := "0.1-SNAPSHOT"
 
-scalacOptions ++= Seq("-unchecked", "-deprecation")
+scalaVersion := "2.11.5"
 
-libraryDependencies +=
-  "com.typesafe.akka" %% "akka-actor" % "2.3.2"
+scalacOptions ++= Seq(
+  "-unchecked",
+  "-deprecation"
+)
 
-libraryDependencies += "org.scalatest" % "scalatest_2.10" % "2.0" % "test"
+resolvers ++= Seq(
+  "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/",
+  "Spray"               at "http://repo.spray.io"
+)
 
-resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
+// akka
+libraryDependencies += "com.typesafe.akka" %% "akka-actor" % "2.3.6"
 
+// logging
 libraryDependencies += "ch.qos.logback" % "logback-classic" % "1.1.2"
 
-
 // spray-can
-resolvers += "spray repo" at "http://repo.spray.io"
+libraryDependencies += "io.spray" %% "spray-can" % "1.3.2"
+libraryDependencies += "io.spray" %% "spray-routing" % "1.3.2"
 
-libraryDependencies += "io.spray" % "spray-can" % "1.3.1"
+// mysql
+libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.34"
 
-libraryDependencies += "io.spray" % "spray-routing" % "1.3.1"
+// slick
+libraryDependencies += "com.typesafe.slick" %% "slick" % "2.1.0"
 
-libraryDependencies += "postgresql" % "postgresql" % "9.2-1002.jdbc4"
+// test
+libraryDependencies += "org.scalatest" %% "scalatest" % "2.2.4" % "test"

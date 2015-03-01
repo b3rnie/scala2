@@ -1,8 +1,9 @@
-import bittorrent._
+//import bittorrent._
 import org.scalatest._
-import scala.util.Random
+//import scala.util.Random
 
 class DHTSpec extends FlatSpec {
+/*
   "Distance between nodes" should "be calculated correctly" in {
     assert(DHT.distance(Array[Byte](0x00, 0x01),
                         Array[Byte](0x02, 0x00)) === 513)
@@ -28,5 +29,5 @@ class DHTSpec extends FlatSpec {
     // 2^159
     bint = 1
     println(bint << 159)
-  }
+  }*/
 }

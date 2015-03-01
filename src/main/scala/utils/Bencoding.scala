@@ -1,8 +1,7 @@
-package tracker
-
+package utils
 import scala.collection.BufferedIterator
 
-object Bencoding{
+object Bencoding {
   sealed abstract class Entry
   case class Int(val int : scala.Int)           extends Entry
   case class List(val list : scala.List[Entry]) extends Entry
@@ -28,7 +27,7 @@ object Bencoding{
             case 'l' => decodeList(input)
             case 'd' => decodeDict(input)
             case c   =>
-              throw new DecodeException("unexpected character")
+              throw new DecodeException("unexpected character: " + c)
           }
       }
     } catch {

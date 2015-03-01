@@ -1,8 +1,8 @@
-import bittorrent._
+import utils.Bencoding
 import org.scalatest._
 
 class BencodingSpec extends FlatSpec {
-
+/*
   "A Bencoded file" should "be decoded and encoded to the same thing" in {
     val original_bytes = FileUtils.readFile("/home/bernie/testtorrent.torrent")
     val decoded        = Bencoding.decode(original_bytes)
@@ -15,10 +15,11 @@ class BencodingSpec extends FlatSpec {
     })
     assert(original_bytes === encoded_bytes)
   }
+ */
 
-  //"3:foo" must "produce a string 'foo'" in {
-  //  Bencoding.decode("3:foo".toArray)
-  //}
+  "3:foo" must "produce a string 'foo'" in {
+    Bencoding.decode("3:foo".toArray)
+  }
 
 //  it should "throw NoSuchElementException if an empty stack is popped" in {
 //    val emptyStack = new Stack[String]

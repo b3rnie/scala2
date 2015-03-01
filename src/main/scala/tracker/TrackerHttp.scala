@@ -2,11 +2,13 @@ package tracker
 
 import akka.actor.{Actor, ActorRef, ActorSystem, Props, Terminated}
 import akka.io.{IO,Tcp}
+import generic.Logging
 import spray.can.Http
 import spray.http._
 import spray.routing.{HttpService, RequestContext}
 import HttpMethods._
 import java.net.InetSocketAddress
+import utils.Bencoding
 
 class HttpTracker(port : Int) extends Logging {
   implicit val system = ActorSystem("http")
@@ -17,7 +19,7 @@ class HttpTracker(port : Int) extends Logging {
   }
 }
 
-class HttpTrackerActor(port : Int) extends Actor with Logging {
+class HttpTrackerActor(port : Int) extends Actor with generic.Logging {
   import context.system
   IO(Http) ! Http.Bind(self, interface = "localhost", port = port)
   def receive: Receive = {
@@ -38,7 +40,7 @@ class HttpTrackerActor(port : Int) extends Actor with Logging {
 
 class HttpTrackerConnectionActor(
   remote     : InetSocketAddress,
-  connection : ActorRef) extends Actor with Logging {
+  connection : ActorRef) extends Actor with generic.Logging {
 
   context.watch(connection)
   def receive: Receive = {

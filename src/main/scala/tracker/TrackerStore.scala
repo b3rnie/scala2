@@ -5,6 +5,7 @@ import java.io.{FileOutputStream,
                 RandomAccessFile,
                 File}
 import akka.actor.{Actor, ActorSystem, Props}
+import generic._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.concurrent.duration._

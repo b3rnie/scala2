@@ -1,7 +1,7 @@
-package tracker
+package utils
 
-import scala.io.{Source}
 import java.io._
+import scala.io.{Source}
 
 object FileUtils {
   def readFile(name : String) : List[Byte] = {
